@@ -1,0 +1,71 @@
+name: Electricity Price Daily Pipeline
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC (07:00 CET in winter, 08:00 CEST in summer)
+    - cron: '0 6 * * *'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode (local or production)'
+        required: false
+        default: 'production'
+        type: choice
+        options:
+          - local
+          - production
+
+jobs:
+  run-daily-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Feature Backfill (daily update)
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        run: |
+          echo "Collecting yesterday's data..."
+          python pipelines/feature_backfill.py \
+            --mode production \
+            --start-date $(date -d "yesterday" +%Y-%m-%d) \
+            --end-date $(date -d "yesterday" +%Y-%m-%d)
+
+      - name: Run Inference Pipeline (generate forecast)
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        run: |
+          echo "Generating 7-day forecast..."
+          python pipelines/inference_pipeline.py \
+            --mode production \
+            --days 7
+
+      - name: Commit forecast outputs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Daily forecast generated [skip ci]"
+          file_pattern: 'outputs/*.csv outputs/*.png'
+          push_options: '--force'
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Pipeline failed! Check the logs for details."
+          # Add notification logic here (email, Slack, etc.)
