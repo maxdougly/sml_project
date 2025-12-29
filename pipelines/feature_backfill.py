@@ -39,11 +39,11 @@ def engineer_features(weather_df, price_df):
     merged_df['date'] = pd.to_datetime(merged_df['date'])
     merged_df = merged_df.sort_values('date')
 
-    # Temporal features
-    merged_df['hour'] = merged_df['date'].dt.hour
+    # Temporal features (daily granularity)
     merged_df['day_of_week'] = merged_df['date'].dt.dayofweek
     merged_df['month'] = merged_df['date'].dt.month
     merged_df['is_weekend'] = (merged_df['day_of_week'] >= 5).astype(int)
+    merged_df['day_of_year'] = merged_df['date'].dt.dayofyear
 
     # Weather features
     merged_df['temp_squared'] = merged_df['temperature_2m_mean'] ** 2
@@ -51,20 +51,25 @@ def engineer_features(weather_df, price_df):
         merged_df['wind_speed_10m_max'] * merged_df['temperature_2m_mean']
     )
 
-    # Lag features (price history)
-    merged_df['price_lag_1d'] = merged_df['price_sek_kwh_mean'].shift(24)
-    merged_df['price_lag_7d'] = merged_df['price_sek_kwh_mean'].shift(168)
+    # Lag features (price history) - DAILY DATA
+    merged_df['price_lag_1d'] = merged_df['price_sek_kwh_mean'].shift(1)  # 1 day ago
+    merged_df['price_lag_7d'] = merged_df['price_sek_kwh_mean'].shift(7)  # 7 days ago
 
-    # Rolling statistics
+    # Rolling statistics - DAILY DATA
     merged_df['price_rolling_mean_7d'] = (
-        merged_df['price_sek_kwh_mean'].rolling(window=168, min_periods=1).mean()
+        merged_df['price_sek_kwh_mean'].rolling(window=7, min_periods=1).mean()
     )
     merged_df['price_rolling_std_7d'] = (
-        merged_df['price_sek_kwh_mean'].rolling(window=168, min_periods=1).std()
+        merged_df['price_sek_kwh_mean'].rolling(window=7, min_periods=1).std()
     )
 
-    # Drop rows with NaN (from lag features)
-    merged_df = merged_df.dropna()
+    # Drop rows with NaN only in critical columns
+    # Allow NaN in long-term lags (price_lag_7d) for small datasets
+    critical_cols = ['price_sek_kwh_mean', 'temperature_2m_mean', 'price_lag_1d']
+    merged_df = merged_df.dropna(subset=critical_cols)
+
+    # Fill remaining NaN in lag features with forward fill
+    merged_df = merged_df.ffill()
 
     return merged_df
 
