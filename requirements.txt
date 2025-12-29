@@ -20,10 +20,9 @@ seaborn>=0.12.0
 # UI (optional)
 gradio>=4.0.0
 
-# Production mode (optional - only needed for Hopsworks)
-# Uncomment these if using --mode production:
-# hopsworks>=3.0.0
-# hsfs[python]>=3.0.0
+# Production mode (Hopsworks Feature Store)
+hopsworks>=3.0.0
+hsfs[python]>=3.0.0
 
 # Configuration
 pyyaml>=6.0
